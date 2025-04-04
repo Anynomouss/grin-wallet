@@ -114,13 +114,6 @@ where
 		let mut config_file_name = PathBuf::from(self.data_dir.clone());
 		config_file_name.push(file_name);
 
-		// create top level dir if it doesn't exist
-		let dd = PathBuf::from(self.data_dir.clone());
-		if !dd.exists() {
-			// try create
-			fs::create_dir_all(dd)?;
-		}
-
 		let mut data_dir_name = PathBuf::from(self.data_dir.clone());
 		data_dir_name.push(GRIN_WALLET_DIR);
 
@@ -145,7 +138,13 @@ where
 
 		// if no config provided, update defaults
 		if update == true {
-			default_config.update_paths(&abs_path_node, &absolute_path_wallet);
+			// create top level dir if it doesn't exist
+			let dd = PathBuf::from(self.data_dir.clone());
+			if !dd.exists() {
+				// try create
+				fs::create_dir_all(dd)?;
+				default_config.update_paths(&abs_path_node, &absolute_path_wallet);
+			}
 		};
 		let res =
 			default_config.write_to_file(config_file_name.to_str().unwrap(), false, None, None);
