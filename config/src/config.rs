@@ -49,23 +49,23 @@ pub fn get_wallet_path(
 	create_path: bool,
 ) -> Result<PathBuf, ConfigError> {
 	// Check if grin dir exists
-	let mut grin_path = match dirs::home_dir() {
+	let mut wallet_path = match dirs::home_dir() {
 		Some(p) => p,
 		None => PathBuf::new(),
 	};
-	grin_path.push(GRIN_HOME);
-	grin_path.push(chain_type.shortname());
+	wallet_path.push(GRIN_HOME);
+	wallet_path.push(chain_type.shortname());
 	// Create if the default path doesn't exist
-	if !grin_path.exists() && create_path {
-		fs::create_dir_all(grin_path.clone())?;
+	if !wallet_path.exists() && create_path {
+		fs::create_dir_all(wallet_path.clone())?;
 	}
 
-	if !grin_path.exists() {
+	if !wallet_path.exists() {
 		Err(ConfigError::PathNotFoundError(String::from(
-			grin_path.to_str().unwrap(),
+			wallet_path.to_str().unwrap(),
 		)))
 	} else {
-		Ok(grin_path)
+		Ok(wallet_path)
 	}
 }
 
