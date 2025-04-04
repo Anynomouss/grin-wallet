@@ -82,12 +82,12 @@ fn real_main() -> i32 {
 
 	let mut current_dir = None;
 	let mut create_path = false;
-
 	if args.is_present("top_level_dir") {
 		let res = args.value_of("top_level_dir");
 		match res {
 			Some(d) => {
-				current_dir = Some(PathBuf::from(d.replace("/", "\\")));
+				let d = d.to_owned().replace("/", "\\");
+				current_dir = Some(PathBuf::from(d));
 			}
 			None => {
 				warn!("Argument --top_level_dir needs a value. Defaulting to current directory")
@@ -151,8 +151,8 @@ fn real_main() -> i32 {
 			.unwrap()
 			.clone(),
 	);
-	global::init_global_accept_fee_base(config.members.as_ref().unwrap().wallet.accept_fee_base());
 
+	global::init_global_accept_fee_base(config.members.as_ref().unwrap().wallet.accept_fee_base());
 	let wallet_config = config.clone().members.unwrap().wallet;
 	let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None).unwrap();
 	cmd::wallet_command(&args, config, node_client)

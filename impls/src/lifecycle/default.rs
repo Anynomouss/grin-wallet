@@ -133,7 +133,7 @@ where
 			return Err(Error::Lifecycle(msg));
 		}
 
-		// just leave as is if file exists but there's no data dir
+		// If config exists but the datadir not yet exists, create data dir return ok
 		if config_file_name.exists() {
 			return Ok(());
 		}

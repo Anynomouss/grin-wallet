@@ -85,6 +85,7 @@ where
 	let chain_type = global::get_chain_type();
 	let mut w_lock = owner_api.wallet_inst.lock();
 	let p = w_lock.lc_provider()?;
+	println!("Checkpoint");
 	p.create_config(
 		&chain_type,
 		WALLET_CONFIG_FILE_NAME,

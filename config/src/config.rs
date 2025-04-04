@@ -177,8 +177,11 @@ fn check_api_secret_file(
 	}
 }
 
-/// Handles setup and detection of paths for wallet
-/// Use config file in a) current dir as template, b) in top path, or c) .grin home
+/// Initial wallet setup doess the following
+/// Try in thiss order a) current dir as template, b) in top path, or c) .grin home
+/// - load default config values
+/// - update the wallet and node dir to the correct paths
+/// - If the config exists, but the wallet data dir does not, load config and continue wallet generation
 pub fn initial_setup_wallet(
 	chain_type: &global::ChainTypes,
 	data_path: Option<PathBuf>,
@@ -203,10 +206,11 @@ pub fn initial_setup_wallet(
 	// Get path to the node dir(s), first try top dir, if no node api_secret return home./grin
 	let node_path = get_node_path(Some(wallet_path.clone()), chain_type)?;
 
-	// Get path to the newwly to be created config file
+	// Get path to the newly to be created config file
 	let mut config_path = wallet_path.clone();
 	config_path.push(WALLET_CONFIG_FILE_NAME);
-
+	let mut data_dir = wallet_path.clone();
+	data_dir.push(GRIN_WALLET_DIR);
 	// Check if config exists in working dir, if so, use it as template for newly created config
 	let (path, config) = if let Some(p) = check_config_current_dir(WALLET_CONFIG_FILE_NAME) {
 		let mut path = p.clone();
@@ -217,22 +221,40 @@ pub fn initial_setup_wallet(
 		config.update_paths(&wallet_path, &node_path);
 		(path, config)
 	} else {
-		// Return defaults config updated with node and wallet dir and chain dir
 		match config_path.clone().exists() {
+			// If config does not exist updated node and wallet dir
 			false => {
 				let mut default_config = GlobalWalletConfig::for_chain(chain_type);
-				default_config.config_file_path = Some(config_path);
+				default_config.config_file_path = Some(config_path.clone());
 				// Update paths relative to current dir
 				default_config.update_paths(&wallet_path, &node_path);
+				// Write config file
+				let res =
+					default_config.write_to_file(config_path.to_str().unwrap(), false, None, None);
+				if let Err(e) = res {
+					let msg = format!(
+						"Error creating config file as ({}): {}",
+						config_path.to_str().unwrap(),
+						e
+					);
+					return Err(ConfigError::SerializationError(msg));
+				}
 				(wallet_path, default_config)
 			}
+			// If only the config exists, but no wallet data, just load the cofig and proceed
 			true => {
-				let mut path = wallet_path.clone();
-				path.pop();
-				(
-					path,
-					GlobalWalletConfig::new(config_path.to_str().unwrap())?,
-				)
+				// If both config and data_dir exist, throw an error
+				if data_dir.exists() {
+					let msg = format!(
+						"{} already exists in the target directory ({}). Please remove it first",
+						config_path.to_str().unwrap(),
+						data_dir.to_str().unwrap(),
+					);
+					return Err(ConfigError::SerializationError(msg));
+				} else {
+					let existing_config = GlobalWalletConfig::new(config_path.to_str().unwrap())?;
+					(wallet_path, existing_config)
+				}
 			}
 		}
 	};
@@ -326,20 +348,21 @@ impl GlobalWalletConfig {
 
 	/// Update paths
 	pub fn update_paths(&mut self, wallet_home: &PathBuf, node_home: &PathBuf) {
-		let mut wallet_path = wallet_home.clone();
-		wallet_path.push(GRIN_WALLET_DIR);
-		self.members.as_mut().unwrap().wallet.data_file_dir =
-			wallet_path.to_str().unwrap().to_owned();
-		let mut secret_path = wallet_home.clone();
-		secret_path.push(OWNER_API_SECRET_FILE_NAME);
-		self.members.as_mut().unwrap().wallet.api_secret_path =
-			Some(secret_path.to_str().unwrap().to_owned());
+		let mut data_file_dir = wallet_home.clone();
 		let mut node_secret_path = node_home.clone();
+		let mut secret_path = wallet_home.clone();
+		let mut log_path = wallet_home.clone();
+		let tor_path = wallet_home.clone();
 		node_secret_path.push(API_SECRET_FILE_NAME);
+		data_file_dir.push(GRIN_WALLET_DIR);
+		secret_path.push(OWNER_API_SECRET_FILE_NAME);
+		log_path.push(WALLET_LOG_FILE_NAME);
+		self.members.as_mut().unwrap().wallet.data_file_dir =
+			data_file_dir.to_str().unwrap().to_owned();
 		self.members.as_mut().unwrap().wallet.node_api_secret_path =
 			Some(node_secret_path.to_str().unwrap().to_owned());
-		let mut log_path = wallet_home.clone();
-		log_path.push(WALLET_LOG_FILE_NAME);
+		self.members.as_mut().unwrap().wallet.api_secret_path =
+			Some(secret_path.to_str().unwrap().to_owned());
 		self.members
 			.as_mut()
 			.unwrap()
@@ -347,7 +370,6 @@ impl GlobalWalletConfig {
 			.as_mut()
 			.unwrap()
 			.log_file_path = log_path.to_str().unwrap().to_owned();
-		let tor_path = wallet_home.clone();
 		self.members
 			.as_mut()
 			.unwrap()
