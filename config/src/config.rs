@@ -189,7 +189,11 @@ pub fn initial_setup_wallet(
 ) -> Result<GlobalWalletConfig, ConfigError> {
 	if create_path {
 		if let Some(p) = data_path.clone() {
-			fs::create_dir_all(p)?;
+			// Fix for a bug in the rust fs package to handle "\" in paths
+			let p_fix = p.clone();
+			let p_fix = p_fix.to_str().unwrap().to_owned().replace("\\", "/");
+			let p_fix = PathBuf::from(p_fix);
+			fs::create_dir_all(p_fix)?;
 		}
 	}
 
