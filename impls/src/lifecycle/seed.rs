@@ -166,8 +166,16 @@ impl WalletSeed {
 		// create directory if it doesn't exist
 		fs::create_dir_all(data_file_dir).map_err(|_| Error::IO)?;
 
-		let seed_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, SEED_FILE,);
+		// Format data path properly
+		let data_file_dir_formatted = data_file_dir;
+		let data_file_dir_formatted =
+			data_file_dir_formatted.replace("/", &MAIN_SEPARATOR.to_string());
+		let data_file_dir_formatted =
+			data_file_dir_formatted.replace("\\", &MAIN_SEPARATOR.to_string());
+		let seed_file_path =
+			&format!("{}{}{}", data_file_dir_formatted, MAIN_SEPARATOR, SEED_FILE,);
 
+		// Inform the user the seed has been generated
 		warn!("Generating wallet seed file at: {}", seed_file_path);
 		let exists = WalletSeed::seed_file_exists(data_file_dir)?;
 		if exists && !test_mode {
