@@ -188,9 +188,12 @@ pub fn initial_setup_wallet(
 	create_path: bool,
 ) -> Result<GlobalWalletConfig, ConfigError> {
 	if create_path {
-		if let Some(path_fixed) = &data_path {
+		if let Some(p) = data_path.clone() {
 			// Fix for a bug in the rust fs package to handle "\" in paths
-			fs::create_dir_all(&path_fixed)?;
+			let p_fix = p.clone();
+			let p_fix = p_fix.to_str().unwrap().to_owned().replace("\\", "/");
+			let p_fix = PathBuf::from(p_fix);
+			fs::create_dir_all(p_fix)?;
 		}
 	}
 
@@ -349,26 +352,15 @@ impl GlobalWalletConfig {
 
 	/// Update paths
 	pub fn update_paths(&mut self, wallet_home: &PathBuf, node_home: &PathBuf) {
-		// Below code formats the path to use "\\" in line with all paths in the toml file
-		let wallet_home_formatted = wallet_home.clone().clone();
-		let wallet_home_formatted = wallet_home_formatted
-			.to_str()
-			.unwrap()
-			.to_owned()
-			.replace("/", "\\");
-		let wallet_home_formatted = PathBuf::from(wallet_home_formatted);
-		// Clone paths for editing
-		let mut data_file_dir = wallet_home_formatted.clone();
+		let mut data_file_dir = wallet_home.clone();
 		let mut node_secret_path = node_home.clone();
-		let mut secret_path = wallet_home_formatted.clone();
-		let mut log_path = wallet_home_formatted.clone();
-		let tor_path = wallet_home_formatted.clone();
-		// Push the respective directories to get the final paths
+		let mut secret_path = wallet_home.clone();
+		let mut log_path = wallet_home.clone();
+		let tor_path = wallet_home.clone();
 		node_secret_path.push(API_SECRET_FILE_NAME);
 		data_file_dir.push(GRIN_WALLET_DIR);
 		secret_path.push(OWNER_API_SECRET_FILE_NAME);
 		log_path.push(WALLET_LOG_FILE_NAME);
-		// Update the config variabless with the update paths
 		self.members.as_mut().unwrap().wallet.data_file_dir =
 			data_file_dir.to_str().unwrap().to_owned();
 		self.members.as_mut().unwrap().wallet.node_api_secret_path =

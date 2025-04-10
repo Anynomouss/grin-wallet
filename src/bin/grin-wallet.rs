@@ -86,7 +86,7 @@ fn real_main() -> i32 {
 		let res = args.value_of("top_level_dir");
 		match res {
 			Some(d) => {
-				let d = d.to_owned().replace("\\", "/"); // Fix for path since backslashes in paths do not work on Linux
+				let d = d.to_owned().replace("/", "\\"); // Fix for fs to work with paths on Linux
 				current_dir = Some(PathBuf::from(d));
 			}
 			None => {
