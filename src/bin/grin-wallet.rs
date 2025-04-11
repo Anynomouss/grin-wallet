@@ -24,12 +24,12 @@ use crate::util::init_logger;
 use clap::App;
 use grin_core as core;
 use grin_util as util;
+use grin_wallet::cmd;
 use grin_wallet_config as config;
 use grin_wallet_impls::HTTPNodeClient;
 use std::env;
 use std::path::PathBuf;
-
-use grin_wallet::cmd;
+use std::path::MAIN_SEPARATOR;
 
 // include build information
 pub mod built_info {
@@ -53,6 +53,13 @@ pub fn info_strings() -> (String, String) {
 		)
 		.to_string(),
 	)
+}
+
+// Helper fuction to format paths according to OS, avoids bugs on Linux
+pub fn fmt_path(path: String) -> String {
+	let sep = &MAIN_SEPARATOR.to_string();
+	let path = path.replace("/", &sep).replace("\\", &sep);
+	path
 }
 
 fn log_build_info() {
@@ -86,7 +93,7 @@ fn real_main() -> i32 {
 		let res = args.value_of("top_level_dir");
 		match res {
 			Some(d) => {
-				let d = d.to_owned().replace("/", "\\"); // Fix for fs to work with paths on Linux
+				let d = fmt_path(d.to_owned().to_string()); // Fix for fs to work with paths on Linu
 				current_dir = Some(PathBuf::from(d));
 			}
 			None => {

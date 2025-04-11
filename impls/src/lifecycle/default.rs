@@ -27,6 +27,15 @@ use crate::LMDBBackend;
 use grin_util::logger::LoggingConfig;
 use std::fs;
 use std::path::PathBuf;
+use std::path::MAIN_SEPARATOR;
+
+// Helper fuction to format paths according to OS, avoids bugs on Linux
+pub fn fmt_path(path: String) -> String {
+	let sep = &MAIN_SEPARATOR.to_string();
+	let path = path.replace("/", &sep);
+	let path = path.replace("\\", &sep);
+	path
+}
 
 pub struct DefaultLCProvider<'a, C, K>
 where
@@ -64,7 +73,13 @@ where
 	}
 
 	fn get_top_level_directory(&self) -> Result<String, Error> {
-		Ok(self.data_dir.to_owned())
+		let sep = &MAIN_SEPARATOR.to_string();
+		let data_dir = self
+			.data_dir
+			.to_owned()
+			.replace("/", &sep)
+			.replace("\\", &sep);
+		Ok(data_dir)
 	}
 
 	fn create_config(
@@ -183,11 +198,11 @@ where
 	) -> Result<(), Error> {
 		let mut data_dir_name = PathBuf::from(self.data_dir.clone());
 		data_dir_name.push(GRIN_WALLET_DIR);
-		let data_dir_name = data_dir_name.to_str().unwrap();
+		let data_dir_name = fmt_path((data_dir_name.to_str().unwrap()).to_string());
 		let exists = WalletSeed::seed_file_exists(&data_dir_name);
 		if !test_mode {
 			if let Ok(true) = exists {
-				let msg = format!("Wallet seed already exists at: {}", data_dir_name);
+				let msg = format!("Wallet seed already exists at4565: {}", data_dir_name);
 				return Err(Error::WalletSeedExists(msg));
 			}
 		}
@@ -231,7 +246,7 @@ where
 	) -> Result<Option<SecretKey>, Error> {
 		let mut data_dir_name = PathBuf::from(self.data_dir.clone());
 		data_dir_name.push(GRIN_WALLET_DIR);
-		let data_dir_name = data_dir_name.to_str().unwrap();
+		let data_dir_name = fmt_path(data_dir_name.to_str().unwrap().to_string());
 		let mut wallet: LMDBBackend<'a, C, K> =
 			match LMDBBackend::new(&data_dir_name, self.node_client.clone()) {
 				Err(e) => {
@@ -276,7 +291,7 @@ where
 	) -> Result<ZeroingString, Error> {
 		let mut data_dir_name = PathBuf::from(self.data_dir.clone());
 		data_dir_name.push(GRIN_WALLET_DIR);
-		let data_dir_name = data_dir_name.to_str().unwrap();
+		let data_dir_name = fmt_path(data_dir_name.display().to_string());
 		let wallet_seed = WalletSeed::from_file(&data_dir_name, password)
 			.map_err(|_| Error::Lifecycle("Error opening wallet seed file".into()))?;
 		let res = wallet_seed
