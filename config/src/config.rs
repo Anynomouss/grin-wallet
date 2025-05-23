@@ -48,7 +48,14 @@ pub fn get_wallet_path(
 	chain_type: &global::ChainTypes,
 	create_path: bool,
 ) -> Result<PathBuf, ConfigError> {
-	// Check if grin dir exists
+	// 1) A If not new wallet, check if walelt exist in working dir
+	let mut wallet_path = std::env::current_dir()?;
+	wallet_path.push(GRIN_WALLET_DIR);
+	if create_path == false & wallet_path.exists() {
+		wallet_path.pop();
+		return Ok(wallet_path);
+	};
+	// 1) B, chose working direcotry Check if grin dir exists
 	let mut wallet_path = match dirs::home_dir() {
 		Some(p) => p,
 		None => PathBuf::new(),
@@ -59,7 +66,6 @@ pub fn get_wallet_path(
 	if !wallet_path.exists() && create_path {
 		fs::create_dir_all(wallet_path.clone())?;
 	}
-
 	if !wallet_path.exists() {
 		Err(ConfigError::PathNotFoundError(String::from(
 			wallet_path.to_str().unwrap(),
@@ -215,22 +221,23 @@ pub fn initial_setup_wallet(
 	config_path.push(WALLET_CONFIG_FILE_NAME);
 	let mut data_dir = wallet_path.clone();
 	data_dir.push(GRIN_WALLET_DIR);
-	// Check if config exists in working dir, if so, use it as template for newly created config
+	// Check if a config exists in theworking dir, if so load it
 	let (path, config) = if let Some(p) = check_config_current_dir(WALLET_CONFIG_FILE_NAME) {
 		let mut path = p.clone();
 		path.pop();
 		let mut config = GlobalWalletConfig::new(p.to_str().unwrap())?;
-		// Use template config, update data_dir, network and api secrets
-		config.config_file_path = Some(config_path);
-		config.update_paths(&wallet_path, &node_path);
+		// If loaded an run with 'init', use te config as template, update node and wallet dir
+		if create_path == true {
+			config.config_file_path = Some(config_path);
+			config.update_paths(&wallet_path, &node_path);
+		}
 		(path, config)
 	} else {
 		match config_path.clone().exists() {
-			// If config does not exist updated node and wallet dir
+			// If the config does not exist, load default and updated node and wallet dir
 			false => {
 				let mut default_config = GlobalWalletConfig::for_chain(chain_type);
 				default_config.config_file_path = Some(config_path.clone());
-				// Update paths relative to current dir
 				default_config.update_paths(&wallet_path, &node_path);
 				// Write config file
 				let res =
@@ -245,7 +252,7 @@ pub fn initial_setup_wallet(
 				}
 				(wallet_path, default_config)
 			}
-			// If only the config exists, but no wallet data, just load the cofig and proceed
+			// If only the config exists, but no wallet data, load the cofig and proceed
 			true => {
 				// If both config and data_dir exist, throw an error
 				if data_dir.exists() {
@@ -256,8 +263,8 @@ pub fn initial_setup_wallet(
 					);
 					return Err(ConfigError::SerializationError(msg));
 				} else {
-					let existing_config = GlobalWalletConfig::new(config_path.to_str().unwrap())?;
-					(wallet_path, existing_config)
+					let config = GlobalWalletConfig::new(config_path.to_str().unwrap())?;
+					(wallet_path, config)
 				}
 			}
 		}
