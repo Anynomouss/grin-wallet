@@ -14,15 +14,6 @@
 
 //! Configuration file management
 
-use rand::distributions::{Alphanumeric, Distribution};
-use rand::thread_rng;
-use std::env;
-use std::fs::{self, File};
-use std::io::prelude::*;
-use std::io::BufReader;
-use std::path::PathBuf;
-use toml;
-
 use crate::comments::{insert_comments, migrate_comments};
 use crate::core::global;
 use crate::types::{
@@ -30,6 +21,15 @@ use crate::types::{
 };
 use crate::types::{TorConfig, WalletConfig};
 use crate::util::logger::LoggingConfig;
+use log::warn;
+use rand::distributions::{Alphanumeric, Distribution};
+use rand::thread_rng;
+use std::env;
+use std::fs::{self, File};
+use std::io::prelude::*;
+use std::io::BufReader;
+use std::path::{Path, PathBuf};
+use toml;
 
 /// Wallet configuration file name
 pub const WALLET_CONFIG_FILE_NAME: &str = "grin-wallet.toml";
@@ -48,11 +48,12 @@ pub fn get_wallet_path(
 	chain_type: &global::ChainTypes,
 	create_path: bool,
 ) -> Result<PathBuf, ConfigError> {
-	// 1) A If not new wallet, check if walelt exist in working dir
+	// 1) A If not a new wallet, check if wallet exist in working dir
 	let mut wallet_path = std::env::current_dir()?;
 	wallet_path.push(GRIN_WALLET_DIR);
 	if create_path == false & wallet_path.exists() {
 		wallet_path.pop();
+		println!("Detected 'wallet_data' in your working dir, grin-wallet will select this wallet");
 		return Ok(wallet_path);
 	};
 	// 1) B, chose working direcotry Check if grin dir exists
@@ -226,10 +227,14 @@ pub fn initial_setup_wallet(
 		let mut path = p.clone();
 		path.pop();
 		let mut config = GlobalWalletConfig::new(p.to_str().unwrap())?;
-		// If loaded an run with 'init', use te config as template, update node and wallet dir
+		if create_path == false {
+			warn!("Detected 'wallet.toml' detected in working dir, grin-wallet will load the associated wallet.");
+		}
+		// If loaded an run with 'init', use local config as template, update node and wallet dir
 		if create_path == true {
 			config.config_file_path = Some(config_path);
 			config.update_paths(&wallet_path, &node_path);
+			warn!("Detected 'wallet.toml' in your working dir, grin-wallet will used this config as template for the new wallet config.");
 		}
 		(path, config)
 	} else {
@@ -301,7 +306,7 @@ impl GlobalWalletConfig {
 	pub fn for_chain(chain_type: &global::ChainTypes) -> GlobalWalletConfig {
 		let mut defaults_conf = GlobalWalletConfig::default();
 		let defaults = &mut defaults_conf.members.as_mut().unwrap().wallet;
-		defaults.chain_type = Some(chain_type.clone());
+		defaults.chain_type = Some(*chain_type);
 
 		match *chain_type {
 			global::ChainTypes::Mainnet => {}
@@ -358,12 +363,12 @@ impl GlobalWalletConfig {
 	}
 
 	/// Update paths
-	pub fn update_paths(&mut self, wallet_home: &PathBuf, node_home: &PathBuf) {
-		let mut data_file_dir = wallet_home.clone();
-		let mut node_secret_path = node_home.clone();
-		let mut secret_path = wallet_home.clone();
-		let mut log_path = wallet_home.clone();
-		let tor_path = wallet_home.clone();
+	pub fn update_paths(&mut self, wallet_home: &PathBuf, node_home: &Path) {
+		let mut data_file_dir = wallet_home.to_path_buf();
+		let mut node_secret_path = node_home.to_path_buf();
+		let mut secret_path = wallet_home.to_path_buf();
+		let mut log_path = wallet_home.to_path_buf();
+		let tor_path = wallet_home.to_path_buf();
 		node_secret_path.push(API_SECRET_FILE_NAME);
 		data_file_dir.push(GRIN_WALLET_DIR);
 		secret_path.push(OWNER_API_SECRET_FILE_NAME);
@@ -429,7 +434,7 @@ impl GlobalWalletConfig {
 	) -> Result<String, ConfigError> {
 		let config: GlobalWalletConfigMembers =
 			toml::from_str(&GlobalWalletConfig::fix_warning_level(config_str.clone())).unwrap();
-		if config.config_file_version != None {
+		if config.config_file_version.is_some() {
 			return Ok(config_str);
 		}
 		let adjusted_config = GlobalWalletConfigMembers {
@@ -437,7 +442,7 @@ impl GlobalWalletConfig {
 			tor: Some(TorConfig {
 				bridge: TorBridgeConfig::default(),
 				proxy: TorProxyConfig::default(),
-				..config.tor.unwrap_or(TorConfig::default())
+				..config.tor.unwrap_or_default()
 			}),
 			..config
 		};
