@@ -43,20 +43,44 @@ pub const API_SECRET_FILE_NAME: &str = ".foreign_api_secret";
 /// Owner API secret
 pub const OWNER_API_SECRET_FILE_NAME: &str = ".owner_api_secret";
 
+// Function to fix string to file path issues and return absolte path
+
+pub fn fix_path_abs(path: Option<PathBuf>) -> Result<PathBuf, ConfigError> {
+	if let Some(p_buf) = path {
+		p_str = p_buf.to_str();
+		let fixed_str = p_str.replace("\\", "/");
+		let fixed_path = PathBuf::from(fixed_str);
+		// If a new wallet, check if dir exist, if needed create it
+		if create_path {
+			fs::create_dir_all(&fixed_path)?;
+		}
+		let absolute_path = if fixed_path.is_absolute() {
+			fixed_path.canonicalize()?
+		} else {
+			env::current_dir()?.join(&fixed_path).canonicalize()?
+		};
+		// Fix for Windows to strip the '\\?\'prefix added to the path
+		let absolute_path =
+			std::path::PathBuf::from(absolute_path.to_str().unwrap().replace(r"\\?\", ""));
+		Ok(absolute_path); // Return the updated path
+	}
+}
+/// Function to locate the wallet dir and wallet.toml in the order
+/// a) config in top-dir if provided, b) in working dir, c) default dir
 /// Function to get wallet dir and create dirs if not existing
 pub fn get_wallet_path(
 	chain_type: &global::ChainTypes,
 	create_path: bool,
 ) -> Result<PathBuf, ConfigError> {
-	// 1) A If not a new wallet, check if wallet exist in working dir
-	let mut wallet_path = std::env::current_dir()?;
-	wallet_path.push(GRIN_WALLET_DIR);
-	if create_path == false & wallet_path.exists() {
-		wallet_path.pop();
-		println!("Detected 'wallet_data' in your working dir, grin-wallet will select this wallet");
-		return Ok(wallet_path);
+	// A - If not a new wallet, check if wallet dir exists
+	let mut config_path = std::env::current_dir()?;
+	config_path.push(WALLET_CONFIG_FILE_NAME);
+	if create_path == false & config_path.exists() {
+		config_path.pop();
+		warn!("Detected 'wallet.toml' in working dir - opening associated wallet");
+		return Ok(config_path);
 	};
-	// 1) B, chose working direcotry Check if grin dir exists
+	// B - chose working directory Check if grin dir exists
 	let mut wallet_path = match dirs::home_dir() {
 		Some(p) => p,
 		None => PathBuf::new(),
@@ -76,7 +100,8 @@ pub fn get_wallet_path(
 	}
 }
 
-/// Smart function to find the most likely .api_secret location for the node
+/// Smart function to detect the the nodes .api_secret in the order
+/// a) top-dir, b) home directory, create directory if needed
 pub fn get_node_path(
 	data_path: Option<PathBuf>,
 	chain_type: &global::ChainTypes,
@@ -91,8 +116,7 @@ pub fn get_node_path(
 			if node_path.exists() {
 				node_path.pop();
 				Ok(node_path)
-
-			// 1) B If top dir exists, but no config there, return home dir
+			// 1) B If top dir exists, but no api_secret, return home dir
 			} else {
 				let mut node_path = match dirs::home_dir() {
 					Some(p) => p,
@@ -103,7 +127,6 @@ pub fn get_node_path(
 				Ok(node_path)
 			}
 		}
-
 		// 2) If there is no top_dir provided, always return home dir
 		None => {
 			let mut node_path = match dirs::home_dir() {
@@ -184,37 +207,31 @@ fn check_api_secret_file(
 	}
 }
 
-/// Initial wallet setup doess the following
+/// Initial wallet setup does the following
+/// 1) Load wallet config if run without 'init' 2) create wallet if run with 'init''
 /// Try in thiss order a) current dir as template, b) in top path, or c) .grin home
 /// - load default config values
 /// - update the wallet and node dir to the correct paths
-/// - If the config exists, but the wallet data dir does not, load config and continue wallet generation
+/// - if grin-wallet.toml exists, but the wallet data dir does not, load config and continue wallet generation
+/// - Automatically detect grin-wallet.toml in current directory
 pub fn initial_setup_wallet(
 	chain_type: &global::ChainTypes,
-	data_path: Option<PathBuf>,
+	mut data_path: Option<PathBuf>,
 	create_path: bool,
 ) -> Result<GlobalWalletConfig, ConfigError> {
-	if create_path {
-		if let Some(p) = data_path.clone() {
-			// Fix for a bug in the rust fs package to handle "\" in paths
-			let p_fix = p.clone();
-			let p_fix = p_fix.to_str().unwrap().to_owned().replace("\\", "/");
-			let p_fix = PathBuf::from(p_fix);
-			fs::create_dir_all(p_fix)?;
-		}
+	// - Fix top-dir path to  compensate for bug on Linux to handle "\"
+	// - Convert top-dir path to be always absolute for config generation
+	if let Some(p) = &data_path {
+		data_path = Some(fix_path_abs(data_path)?)
 	}
 
-	// Get wallet data_dir path, create it if it does not exist
+	// Get wallet data_dir path if none provided
 	let wallet_path = match data_path {
-		Some(p) => {
-			let mut abs_wallet_path = std::env::current_dir()?;
-			abs_wallet_path.push(p);
-			abs_wallet_path
-		}
+		Some(p) => p,
 		None => get_wallet_path(chain_type, create_path)?,
 	};
-
-	// Get path to the node dir(s), first try top dir, if no node api_secret return home./grin
+	println!("wallet path {}", wallet_path.display());
+	// Get path to the node directory,
 	let node_path = get_node_path(Some(wallet_path.clone()), chain_type)?;
 
 	// Get path to the newly to be created config file
@@ -227,14 +244,10 @@ pub fn initial_setup_wallet(
 		let mut path = p.clone();
 		path.pop();
 		let mut config = GlobalWalletConfig::new(p.to_str().unwrap())?;
-		if create_path == false {
-			warn!("Detected 'wallet.toml' detected in working dir, grin-wallet will load the associated wallet.");
-		}
-		// If loaded an run with 'init', use local config as template, update node and wallet dir
+		// If loaded and run with 'init', use te config as template, update node and wallet dir
 		if create_path == true {
 			config.config_file_path = Some(config_path);
 			config.update_paths(&wallet_path, &node_path);
-			warn!("Detected 'wallet.toml' in your working dir, grin-wallet will used this config as template for the new wallet config.");
 		}
 		(path, config)
 	} else {
@@ -277,6 +290,7 @@ pub fn initial_setup_wallet(
 	// Check API secrets, if ok, return config
 	check_api_secret_file(chain_type, Some(path.clone()), OWNER_API_SECRET_FILE_NAME)?;
 	check_api_secret_file(chain_type, Some(path), API_SECRET_FILE_NAME)?;
+
 	Ok(config)
 }
 
