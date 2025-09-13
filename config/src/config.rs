@@ -43,28 +43,6 @@ pub const API_SECRET_FILE_NAME: &str = ".foreign_api_secret";
 /// Owner API secret
 pub const OWNER_API_SECRET_FILE_NAME: &str = ".owner_api_secret";
 
-// Function to fix string to file path issues and return absolte path
-
-pub fn fix_path_abs(path: Option<PathBuf>) -> Result<PathBuf, ConfigError> {
-	if let Some(p_buf) = path {
-		p_str = p_buf.to_str();
-		let fixed_str = p_str.replace("\\", "/");
-		let fixed_path = PathBuf::from(fixed_str);
-		// If a new wallet, check if dir exist, if needed create it
-		if create_path {
-			fs::create_dir_all(&fixed_path)?;
-		}
-		let absolute_path = if fixed_path.is_absolute() {
-			fixed_path.canonicalize()?
-		} else {
-			env::current_dir()?.join(&fixed_path).canonicalize()?
-		};
-		// Fix for Windows to strip the '\\?\'prefix added to the path
-		let absolute_path =
-			std::path::PathBuf::from(absolute_path.to_str().unwrap().replace(r"\\?\", ""));
-		Ok(absolute_path); // Return the updated path
-	}
-}
 /// Function to locate the wallet dir and wallet.toml in the order
 /// a) config in top-dir if provided, b) in working dir, c) default dir
 /// Function to get wallet dir and create dirs if not existing
@@ -222,7 +200,23 @@ pub fn initial_setup_wallet(
 	// - Fix top-dir path to  compensate for bug on Linux to handle "\"
 	// - Convert top-dir path to be always absolute for config generation
 	if let Some(p) = &data_path {
-		data_path = Some(fix_path_abs(data_path)?)
+		if let Some(p_str) = p.to_str() {
+			let fixed_str = p_str.replace("\\", "/");
+			let fixed_path = PathBuf::from(fixed_str);
+			// If a new wallet, check if dir exist, if needed create it
+			if create_path {
+				fs::create_dir_all(&fixed_path)?;
+			}
+			let absolute_path = if fixed_path.is_absolute() {
+				fixed_path.canonicalize()?
+			} else {
+				env::current_dir()?.join(&fixed_path).canonicalize()?
+			};
+			// Fix for Windows to strip the '\\?\'prefix added to the path
+			let absolute_path =
+				std::path::PathBuf::from(absolute_path.to_str().unwrap().replace(r"\\?\", ""));
+			data_path = Some(absolute_path); // Store the updated path
+		}
 	}
 
 	// Get wallet data_dir path if none provided
