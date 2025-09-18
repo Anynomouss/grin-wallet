@@ -197,7 +197,7 @@ pub fn initial_setup_wallet(
 	mut data_path: Option<PathBuf>,
 	create_path: bool,
 ) -> Result<GlobalWalletConfig, ConfigError> {
-	// Fixing the unput path when run with -here or -t (top-dir)
+	// Fixing the input path when run with -here or -t (top-dir)
 	// - Fix top-dir path to  compensate for bug on Linux to handle "\"
 	// - Convert top-dir path to be always absolute for config generation
 	// - Fix for Windows 10/11 to strip the '\\?\' prefix added to the path
